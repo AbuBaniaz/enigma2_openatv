@@ -4,7 +4,7 @@
 #include <lib/gdi/font.h>
 #include <lib/base/init.h>
 #include <lib/base/init_num.h>
-#include <lib/base/nconfig.h>
+#include <lib/base/esimpleconfig.h>
 #ifdef USE_LIBVUGLES2
 #include <vuplus_gles.h>
 #endif
@@ -432,7 +432,7 @@ void gPainter::renderText(const eRect &pos, const std::string &string, int flags
 	o.parm.renderText->offset = offset;
 	o.parm.renderText->tabwidth = tabwidth;
 	if (markedpos >= 0)
-		o.parm.renderText->scrollpos = eConfigManager::getConfigIntValue("config.usage.cursorscroll");
+		o.parm.renderText->scrollpos = eSimpleConfig::getInt("config.usage.cursorscroll");
 	m_rc->submit(o);
 }
 
@@ -1242,7 +1242,7 @@ void gDC::incrementSpinner()
 
 	if (size().width() == 1920)
 	{
-		m_spinner_temp_FHD->blit(*m_spinner_saved_HD, eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos_FHD.size()), 0, 0, 0);
+		m_spinner_temp_FHD->blit(*m_spinner_saved_FHD, eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos_FHD.size()), 0, 0, 0);
 
 		if (m_spinner_pic[m_spinner_i])
 			m_spinner_temp_FHD->blit(*m_spinner_pic[m_spinner_i], eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos_FHD.size()), 0, 0, gPixmap::blitAlphaBlend);
