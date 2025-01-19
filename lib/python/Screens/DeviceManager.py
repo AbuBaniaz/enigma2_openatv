@@ -315,7 +315,7 @@ class StorageDeviceManager():
 		deviceLocation = ""
 		for physdevprefix, pdescription in list(getDeviceDB().items()):
 			if physdev.startswith(physdevprefix):
-				deviceLocation = pdescription
+				deviceLocation = _(pdescription)
 
 		deviceMounts = []
 		mounts = [x for x in mounts if EXPANDER_MOUNT not in x[1]]
@@ -991,10 +991,10 @@ class DeviceManagerMountPoints(Setup):
 			choiceList.append((devMount, devMount))
 			choiceList.append(("", "Custom"))
 			self.mountPoints.append(NoSave(ConfigSelection(default=defaultMountpoint, choices=choiceList)))
-			self.customMountPoints.append(NoSave(ConfigText()))
+			self.customMountPoints.append(NoSave(ConfigText(fixed_size=False)))
 			fileSystemChoices = [(x, x) for x in fileSystems]
 			self.fileSystems.append(NoSave(ConfigSelection(default=fileSystems[0], choices=fileSystemChoices)))
-			self.options.append(NoSave(ConfigText("defaults")))
+			self.options.append(NoSave(ConfigText(default="defaults", fixed_size=False)))
 
 		Setup.__init__(self, session=session, setup="DeviceManagerMountPoints")
 		self.setTitle(_("Select the mount points"))
