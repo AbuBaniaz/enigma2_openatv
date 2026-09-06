@@ -2541,6 +2541,28 @@ struct epgSearchHit
 	}
 };
 
+/* Shared by PARTIAL_TITLE_SEARCH, PARTIAL_DESCRIPTION_SEARCH and
+   PARTIAL_TITLE_OR_DESCRIPTION_SEARCH: does str occur anywhere in
+   ptr[0..len)? */
+static bool partialTextMatch(const char *ptr, int len, const char *str, ssize_t textlen, int casetype)
+{
+	if (casetype == REGEX_CHECK)
+	{
+		std::regex pattern(str);
+		std::string input(ptr, len);
+		return regex_search(input.begin(), input.end(), pattern);
+	}
+	while (len >= textlen)
+	{
+		bool match = (casetype == CASE_CHECK) ? !memcmp(ptr, str, textlen) : !strncasecmp(ptr, str, textlen);
+		if (match)
+			return true;
+		len--;
+		ptr++;
+	}
+	return false;
+}
+
 PyObject *eEPGCache::search(ePyObject arg)
 {
 	ePyObject ret;
@@ -2926,6 +2948,92 @@ PyObject *eEPGCache::search(ePyObject arg)
 				{
 					PyErr_SetString(PyExc_TypeError, "[eEPGCache] Tuple argument 4 is not a string!");
 					//eDebug("[eEPGCache] Tuple argument 4 is not a string!");
+					return NULL;
+				}
+			}
+			else if (tuplesize > 4 && (querytype == PARTIAL_TITLE_OR_DESCRIPTION_SEARCH))
+			{
+				ePyObject obj = PyTuple_GET_ITEM(arg, 3);
+				if (PyUnicode_Check(obj))
+				{
+					int casetype = PyLong_AsLong(PyTuple_GET_ITEM(arg, 4));
+					ssize_t textlen;
+					const char *str = PyUnicode_AsUTF8AndSize(obj, &textlen);
+					const char *ctype = casetypestr(casetype);
+					eDebug("[eEPGCache] Lookup events with '%s' in title or description (%s).", str, ctype);
+					Py_BEGIN_ALLOW_THREADS; /* No Python code in this section, so other threads can run */
+					{
+						singleLock s(cache_lock);
+						std::string title, content;
+						for (DescriptorMap::iterator it(eventData::descriptors.begin());
+							it != eventData::descriptors.end(); ++it)
+						{
+							const uint8_t *data = it->second.data;
+							uint8_t descriptor_tag = data[0];
+							bool matched = false;
+
+							if (descriptor_tag == (u_char)SHORT_EVENT_DESCRIPTOR)
+							{
+								const eit_short_event_descriptor_struct *short_event_descriptor = (const eit_short_event_descriptor_struct *) data;
+
+								/* title: event_name field */
+								const char *titleptr = (const char*)&data[6];
+								int title_len = (int)short_event_descriptor->event_name_length;
+								if (data[EIT_SHORT_EVENT_DESCRIPTOR_SIZE] < 0x20)
+								{
+									title = convertDVBUTF8((unsigned char*)titleptr, title_len, 0x40, 0);
+									titleptr = title.data();
+									title_len = title.length();
+								}
+								if (title_len >= textlen && partialTextMatch(titleptr, title_len, str, textlen, casetype))
+									matched = true;
+
+								/* fallback description: text field, only present when no
+								   extended event descriptor is broadcast for this event */
+								if (!matched)
+								{
+									int text_pos = EIT_SHORT_EVENT_DESCRIPTOR_SIZE + short_event_descriptor->event_name_length;
+									if (text_pos <= data[1] + 1)
+									{
+										int content_len = data[text_pos];
+										const char *contentptr = (const char*)&data[text_pos+1];
+										if (text_pos + content_len <= data[1] + 1)
+										{
+											if (content_len && (unsigned char)contentptr[0] < 0x20)
+											{
+												content = convertDVBUTF8((unsigned char*)contentptr, content_len, 0x40, 0);
+												contentptr = content.data();
+												content_len = content.length();
+											}
+											if (content_len >= textlen && partialTextMatch(contentptr, content_len, str, textlen, casetype))
+												matched = true;
+										}
+									}
+								}
+							}
+							else if (descriptor_tag == (u_char)EXTENDED_EVENT_DESCRIPTOR)
+							{
+								int content_len = data[EIT_EXTENDED_EVENT_DESCRIPTOR_SIZE+1];
+								const char *contentptr = (const char*)&data[EIT_EXTENDED_EVENT_DESCRIPTOR_SIZE+2];
+								if (data[EIT_EXTENDED_EVENT_DESCRIPTOR_SIZE+2] < 0x20)
+								{
+									content = convertDVBUTF8((unsigned char*)contentptr, content_len, 0x40, 0);
+									contentptr = content.data();
+									content_len = content.length();
+								}
+								if (content_len >= textlen && partialTextMatch(contentptr, content_len, str, textlen, casetype))
+									matched = true;
+							}
+
+							if (matched)
+								descr.push_back(it->first);
+						}
+					}
+					Py_END_ALLOW_THREADS;
+				}
+				else
+				{
+					PyErr_SetString(PyExc_TypeError, "[eEPGCache] Tuple argument 4 is not a string!");
 					return NULL;
 				}
 			}
